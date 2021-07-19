@@ -21,7 +21,7 @@ requirements = [
 setup(
     name="pytorch_balanced_sampler",
     version="0.0.1",
-    url="https://github.com/khornlund/pytorch_balanced_sampler",
+    url="https://github.com/Lucashsmello/pytorch_balanced_sampler",
     license='MIT',
     author="Karl Hornlund",
     author_email="karlhornlund@gmail.com",

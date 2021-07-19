@@ -1,5 +1,7 @@
 import numpy as np
+from torch.utils import data
 from torch.utils.data.sampler import BatchSampler, WeightedRandomSampler
+import torch
 
 from .utils import setup_logger
 
@@ -197,10 +199,61 @@ class WeightedFixedBatchSampler(BatchSampler):
         return self.n_batches
 
 
+class BalancedDataLoader(torch.utils.data.DataLoader):
+    def __init__(self, dataset, batch_size=1, num_workers=0, collate_fn=None,
+                 pin_memory=False, worker_init_fn=None, callback_get_label=None, random_state=None):
+        if callback_get_label is not None:
+            labels = self.callback_get_label(dataset)
+        else:
+            labels = BalancedDataLoader._get_labels(dataset)
+
+        if(torch.is_tensor(labels)):
+            labels = labels.numpy()
+        if(isinstance(labels, list)):
+            labels = np.array(labels)
+
+        labels_set = set(labels)
+        n_labels = len(labels_set)
+        labels_idxs = [np.where(labels == l)[0] for l in labels_set]
+        class_samples_per_batch = np.full(n_labels, dtype=np.int, fill_value=batch_size // n_labels)
+        sampler = WeightedFixedBatchSampler(class_samples_per_batch,
+                                            class_idxs=labels_idxs, n_batches=len(labels) // batch_size)
+        super().__init__(dataset, num_workers=num_workers, batch_sampler=sampler,
+                    collate_fn=collate_fn, pin_memory=pin_memory, worker_init_fn=worker_init_fn)
+
+    @staticmethod
+    def _get_labels(dataset):
+        if isinstance(dataset, torch.utils.data.Subset):
+            labels = BalancedDataLoader._get_labels(dataset.dataset)
+            return labels[dataset.indices]
+
+        """
+        Guesses how to get the labels.
+        """
+        if hasattr(dataset, 'get_labels'):
+            return dataset.get_labels()
+        if hasattr(dataset, 'labels'):
+            return dataset.labels
+        if hasattr(dataset, 'targets'):
+            return dataset.targets
+        if hasattr(dataset, 'y'):
+            return dataset.y
+
+        import torchvision
+        if isinstance(dataset, torchvision.datasets.MNIST):
+            return dataset.train_labels.tolist()
+        if isinstance(dataset, torchvision.datasets.ImageFolder):
+            return [x[1] for x in dataset.imgs]
+        if isinstance(dataset, torchvision.datasets.DatasetFolder):
+            return dataset.samples[:][1]
+        raise NotImplementedError
+
+
 class CircularList:
     """
     Applies modulo function to indexing.
     """
+
     def __init__(self, items):
         self._items = items
         self._mod = len(self._items)
