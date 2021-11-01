@@ -197,7 +197,7 @@ class WeightedFixedBatchSampler(BatchSampler):
     def __iter__(self):
         if(self.random_state is not None):
             for cidx in self.class_idxs:
-                self.random_state.shuffle(cidx)
+                cidx.shuffle(self.random_state)
         start_idxs = np.zeros(self.n_classes, dtype=int)
         for bidx in range(self.n_batches):
             yield self._get_batch(start_idxs)
@@ -209,7 +209,7 @@ class WeightedFixedBatchSampler(BatchSampler):
 
 class BalancedDataLoader(torch.utils.data.DataLoader):
     def __init__(self, dataset, batch_size=1, num_workers=0, collate_fn=None,
-                 pin_memory=False, worker_init_fn=None, callback_get_label=None, random_state=None):
+                 pin_memory=False, worker_init_fn=None, callback_get_label=None, shuffle=False, random_state=None):
         if callback_get_label is not None:
             labels = self.callback_get_label(dataset)
         else:
@@ -225,7 +225,8 @@ class BalancedDataLoader(torch.utils.data.DataLoader):
         labels_idxs = [np.where(labels == l)[0] for l in labels_set]
         class_samples_per_batch = np.full(n_labels, dtype=np.int, fill_value=batch_size // n_labels)
         sampler = WeightedFixedBatchSampler(class_samples_per_batch,
-                                            class_idxs=labels_idxs, n_batches=len(labels) // batch_size)
+                                            class_idxs=labels_idxs, n_batches=len(labels) // batch_size,
+                                            shuffle=shuffle, random_state=random_state)
         super().__init__(dataset, num_workers=num_workers, batch_sampler=sampler,
                     collate_fn=collate_fn, pin_memory=pin_memory, worker_init_fn=worker_init_fn)
 
@@ -265,10 +266,9 @@ class CircularList:
     def __init__(self, items):
         self._items = items
         self._mod = len(self._items)
-        self.shuffle()
 
-    def shuffle(self):
-        np.random.shuffle(self._items)
+    def shuffle(self, random_state=np.random):
+        random_state.shuffle(self._items)
 
     def __getitem__(self, key):
         if isinstance(key, slice):
