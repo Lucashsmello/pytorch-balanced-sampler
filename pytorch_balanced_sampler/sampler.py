@@ -170,13 +170,18 @@ class WeightedFixedBatchSampler(BatchSampler):
         The number of batches to yield.
     """
 
-    def __init__(self, class_samples_per_batch, class_idxs, n_batches):
+    def __init__(self, class_samples_per_batch, class_idxs, n_batches, shuffle=False, random_state=None):
         self.class_samples_per_batch = class_samples_per_batch
         self.class_idxs = [CircularList(idx) for idx in class_idxs]
         self.n_batches = n_batches
+        from sklearn.model_selection import ShuffleSplit
 
         self.n_classes = len(self.class_samples_per_batch)
         self.batch_size = self.class_samples_per_batch.sum()
+        if(shuffle):
+            self.random_state = np.random.RandomState(random_state)
+        else:
+            self.random_state = None
 
         assert len(self.class_samples_per_batch) == len(self.class_idxs)
         assert isinstance(self.n_batches, int)
@@ -185,11 +190,14 @@ class WeightedFixedBatchSampler(BatchSampler):
         selected = []
         for c, size in enumerate(self.class_samples_per_batch):
             selected.extend(self.class_idxs[c][start_idxs[c]:start_idxs[c] + size])
-        np.random.shuffle(selected)
+        if(self.random_state is not None):
+            self.random_state.shuffle(selected)
         return selected
 
     def __iter__(self):
-        [cidx.shuffle() for cidx in self.class_idxs]
+        if(self.random_state is not None):
+            for cidx in self.class_idxs:
+                self.random_state.shuffle(cidx)
         start_idxs = np.zeros(self.n_classes, dtype=int)
         for bidx in range(self.n_batches):
             yield self._get_batch(start_idxs)
