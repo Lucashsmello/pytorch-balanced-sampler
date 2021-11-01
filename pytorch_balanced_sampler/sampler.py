@@ -1,5 +1,4 @@
 import numpy as np
-from torch.utils import data
 from torch.utils.data.sampler import BatchSampler, WeightedRandomSampler
 import torch
 
@@ -168,14 +167,19 @@ class WeightedFixedBatchSampler(BatchSampler):
 
     n_batches : int
         The number of batches to yield.
+
+    circular_list : bool
+        If true, this sampler repeat some samples, if needed (when batch_size is not multiple of the number of samples).
+        If true, this ensures the all batches have the same size. 
     """
 
-    def __init__(self, class_samples_per_batch, class_idxs, n_batches, shuffle=False, random_state=None):
+    def __init__(self, class_samples_per_batch, class_idxs, n_batches, circular_list=True, shuffle=False, random_state=None):
         self.class_samples_per_batch = class_samples_per_batch
-        self.class_idxs = [CircularList(idx) for idx in class_idxs]
+        if(circular_list):
+            self.class_idxs = [CircularList(idx) for idx in class_idxs]
+        else:
+            self.class_idxs = class_idxs
         self.n_batches = n_batches
-        from sklearn.model_selection import ShuffleSplit
-
         self.n_classes = len(self.class_samples_per_batch)
         self.batch_size = self.class_samples_per_batch.sum()
         if(shuffle):
@@ -209,7 +213,8 @@ class WeightedFixedBatchSampler(BatchSampler):
 
 class BalancedDataLoader(torch.utils.data.DataLoader):
     def __init__(self, dataset, batch_size=1, num_workers=0, collate_fn=None,
-                 pin_memory=False, worker_init_fn=None, callback_get_label=None, shuffle=False, random_state=None):
+                 pin_memory=False, worker_init_fn=None, callback_get_label=None, circular_list=True,
+                 shuffle=False, random_state=None):
         if callback_get_label is not None:
             labels = self.callback_get_label(dataset)
         else:
@@ -223,9 +228,11 @@ class BalancedDataLoader(torch.utils.data.DataLoader):
         labels_set = set(labels)
         n_labels = len(labels_set)
         labels_idxs = [np.where(labels == l)[0] for l in labels_set]
-        class_samples_per_batch = np.full(n_labels, dtype=np.int, fill_value=batch_size // n_labels)
+        class_samples_per_batch = np.full(n_labels, dtype=np.int, fill_value=int(np.round(batch_size / n_labels)))
         sampler = WeightedFixedBatchSampler(class_samples_per_batch,
-                                            class_idxs=labels_idxs, n_batches=len(labels) // batch_size,
+                                            class_idxs=labels_idxs,
+                                            n_batches=int(np.ceil(len(labels) / class_samples_per_batch.sum())),
+                                            circular_list=circular_list,
                                             shuffle=shuffle, random_state=random_state)
         super().__init__(dataset, num_workers=num_workers, batch_sampler=sampler,
                     collate_fn=collate_fn, pin_memory=pin_memory, worker_init_fn=worker_init_fn)
@@ -255,7 +262,7 @@ class BalancedDataLoader(torch.utils.data.DataLoader):
             return [x[1] for x in dataset.imgs]
         if isinstance(dataset, torchvision.datasets.DatasetFolder):
             return dataset.samples[:][1]
-        raise NotImplementedError
+        raise NotImplementedError("BalancedDataLoader: Labels were not found!")
 
 
 class CircularList:
