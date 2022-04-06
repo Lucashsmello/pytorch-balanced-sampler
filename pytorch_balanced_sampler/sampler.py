@@ -214,9 +214,9 @@ class WeightedFixedBatchSampler(BatchSampler):
 class BalancedDataLoader(torch.utils.data.DataLoader):
     def __init__(self, dataset, batch_size=1, num_workers=0, collate_fn=None,
                  pin_memory=False, worker_init_fn=None, callback_get_label=None, circular_list=True,
-                 shuffle=False, random_state=None):
+                 shuffle=False, random_state=None, **kwargs):
         if callback_get_label is not None:
-            labels = self.callback_get_label(dataset)
+            labels = callback_get_label(dataset)
         else:
             labels = BalancedDataLoader._get_labels(dataset)
 
@@ -235,7 +235,7 @@ class BalancedDataLoader(torch.utils.data.DataLoader):
                                             circular_list=circular_list,
                                             shuffle=shuffle, random_state=random_state)
         super().__init__(dataset, num_workers=num_workers, batch_sampler=sampler,
-                    collate_fn=collate_fn, pin_memory=pin_memory, worker_init_fn=worker_init_fn)
+                    collate_fn=collate_fn, pin_memory=pin_memory, worker_init_fn=worker_init_fn, **kwargs)
 
     @staticmethod
     def _get_labels(dataset):
